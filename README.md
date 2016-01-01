@@ -10,7 +10,7 @@ Example:
 package main
 
 import (
-  "bcm2835"
+  "github.com/railsme/bcm2835"
   "time"
   "fmt"
 )
