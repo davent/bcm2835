@@ -33,11 +33,4 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 	}
 }
-package main
-
-import (
-  "github.com/railsme/bcm2835"
-  "time"
-  "fmt"
-)
 ```
