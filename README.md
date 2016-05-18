@@ -10,7 +10,7 @@ Example:
 package main
 
 import (
-	"examples/gpioTest/bcm2835"
+	"github.com/rhodgekins/bcm2835"
 	"fmt"
 	"time"
 )
