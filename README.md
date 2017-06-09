@@ -4,13 +4,15 @@ Pi. Builds on Mike McCauley's C lib with the same name.
 The package needs Golang 1.1 since the stable 1.0 release doesn't provide a
 stable version of cgo. Needs to be run as sudo.
 
+This is a fork of https://github.com/rhodgekins/bcm2835 which brings a few things up-to-date.
+
 Example:
 
 ```go
 package main
 
 import (
-	"github.com/rhodgekins/bcm2835"
+	"github.com/davent/bcm2835"
 	"fmt"
 	"time"
 )

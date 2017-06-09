@@ -4,13 +4,13 @@
   
    Author: Mike McCauley
    Copyright (C) 2011-2013 Mike McCauley
-   $Id: bcm2835.h,v 1.20 2015/03/31 04:55:41 mikem Exp mikem $
+   $Id: bcm2835.h,v 1.21 2017/02/05 02:08:07 mikem Exp mikem $
 */
 
 /*! \mainpage C library for Broadcom BCM 2835 as used in Raspberry Pi
   
   This is a C library for Raspberry Pi (RPi). It provides access to 
-  GPIO and other IO functions on the Broadcom BCM 2835 chip,
+  GPIO and other IO functions on the Broadcom BCM 2835 chip, as used in the RaspberryPi,
   allowing access to the GPIO pins on the
   26 pin IDE plug on the RPi board so you can control and interface with various external devices.
   
@@ -23,7 +23,7 @@
   BCM 2835).
   
   The version of the package that this documentation refers to can be downloaded 
-  from http://www.airspayce.com/mikem/bcm2835/bcm2835-1.49.tar.gz
+  from http://www.airspayce.com/mikem/bcm2835/bcm2835-1.52.tar.gz
   You can find the latest version at http://www.airspayce.com/mikem/bcm2835
   
   Several example programs are provided.
@@ -35,10 +35,13 @@
   You can also find online help and discussion at http://groups.google.com/group/bcm2835
   Please use that group for all questions and discussions on this topic. 
   Do not contact the author directly, unless it is to discuss commercial licensing.
-  Before asking a question or reporting a bug, please read http://www.catb.org/esr/faqs/smart-questions.html
+  Before asking a question or reporting a bug, please read 
+  - http://en.wikipedia.org/wiki/Wikipedia:Reference_desk/How_to_ask_a_software_question
+  - http://www.catb.org/esr/faqs/smart-questions.html
+  - http://www.chiark.greenend.org.uk/~shgtatham/bugs.html
   
   Tested on debian6-19-04-2012, 2012-07-15-wheezy-raspbian, 2013-07-26-wheezy-raspbian
-  and Occidentalisv01
+  and Occidentalisv01, 2016-02-09 Raspbian Jessie.
   CAUTION: it has been observed that when detect enables such as bcm2835_gpio_len() 
   are used and the pin is pulled LOW
   it can cause temporary hangs on 2012-07-15-wheezy-raspbian, 2013-07-26-wheezy-raspbian
@@ -48,6 +51,24 @@
   If you must use bcm2835_gpio_len() and friends, make sure you disable the pins with 
   bcm2835_gpio_clr_len() and friends after use. 
   
+  \par Running as root
+
+  Prior to the release of Raspbian Jessie in Feb 2016, access to any
+  peripheral device via /dev/mem on the RPi required the process to
+  run as root. Raspbian Jessie permits non-root users to access the
+  GPIO peripheral (only) via /dev/gpiomem, and this library supports
+  that limited mode of operation.
+
+  If the library runs with effective UID of 0 (ie root), then
+  bcm2835_init() will attempt to open /dev/mem, and, if successful, it
+  will permit use of all peripherals and library functions.
+
+  If the library runs with any other effective UID (ie not root), then
+  bcm2835_init() will attempt to open /dev/gpiomem, and, if
+  successful, will only permit GPIO operations. In particular,
+  bcm2835_spi_begin() and bcm2835_i2c_begin() will return false and all
+  other non-gpio operations may fail silently or crash.
+
   \par Installation
   
   This library consists of a single non-shared library and header file, which will be
@@ -141,6 +162,12 @@
   - P1-23 (CLK) 
   - P1-24 (CE0) 
   - P1-26 (CE1)
+
+  Although it is possible to select high speeds for the SPI interface, up to 125MHz (see bcm2835_spi_setClockDivider()) 
+  you should not expect to actually achieve those sorts of speeds with the RPi wiring. Our tests on RPi 2 show that the 
+  SPI CLK line when unloaded has a resonant frequency of about 40MHz, and when loaded, the MOSI and MISO lines 
+  ring at an even lower frequency. Measurements show that SPI waveforms are very poor and unusable at 62 and 125MHz.
+  Dont expect any speed faster than 31MHz to work reliably.
   
   \par I2C Pins
   
@@ -247,8 +274,15 @@
   the right to share who uses it. If you wish to use this software under Open
   Source Licensing, you must contribute all your source code to the open source
   community in accordance with the GPL Version 2 when your application is
-  distributed. See http://www.gnu.org/copyleft/gpl.html and COPYING
+  distributed. See https://www.gnu.org/licenses/gpl-2.0.html and COPYING
   
+ \par Commercial Licensing
+
+ This is the appropriate option if you are creating proprietary applications
+ and you are not prepared to distribute and share the source code of your
+ application. Purchase commercial licenses at http://airspayce.binpress.com
+
+
   \par Acknowledgements
   
   Some of this code has been inspired by Dom and Gert.
@@ -424,6 +458,19 @@
   \version 1.49 2016-01-05
   Added patch from Jonathan Perkin with new functions bcm2835_gpio_eds_multi() and bcm2835_gpio_set_eds_multi().
 
+  \version 1.50 2016-02-28
+  Added support for running as non-root, permitting access to GPIO only. Functions
+  bcm2835_spi_begin() and bcm2835_i2c_begin() will now return 0 if not running as root 
+  (which prevents access to the SPI and I2C peripherals, amongst others). 
+  Testing on Raspbian Jessie.
+
+  \version 1.51 2016-11-03
+  Added documentation about SPI clock divider and resulting SPI speeds on RPi3.
+  Fixed a problem where seg fault could occur in bcm2835_delayMicroseconds() if not running as root. Patch from Pok.
+
+  \version 1.52 2017-02-03
+  Added link to commercial license purchasing.
+
   \author  Mike McCauley (mikem@airspayce.com) DO NOT CONTACT THE AUTHOR DIRECTLY: USE THE LISTS
 */
 
@@ -434,7 +481,7 @@
 
 #include <stdint.h>
 
-#define BCM2835_VERSION 10049 /* Version 1.49 */
+#define BCM2835_VERSION 10052 /* Version 1.52 */
 
 /* RPi 2 is ARM v7, and has DMB instruction for memory barriers.
    Older RPis are ARM v6 and don't, so a coprocessor instruction must be used instead.
@@ -506,7 +553,7 @@ extern uint32_t bcm2835_peripherals_size;
 extern uint32_t *bcm2835_peripherals;
 
 /*! Base of the ST (System Timer) registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_st;
 
@@ -516,32 +563,32 @@ extern volatile uint32_t *bcm2835_st;
 extern volatile uint32_t *bcm2835_gpio;
 
 /*! Base of the PWM registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_pwm;
 
 /*! Base of the CLK registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_clk;
 
 /*! Base of the PADS registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_pads;
 
 /*! Base of the SPI0 registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_spi0;
 
 /*! Base of the BSC0 registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_bsc0;
 
 /*! Base of the BSC1 registers.
-  Available after bcm2835_init has been called
+  Available after bcm2835_init has been called (as root)
 */
 extern volatile uint32_t *bcm2835_bsc1;
 
@@ -713,7 +760,7 @@ typedef enum
     RPI_V2_GPIO_P1_31     =  6,  /*!< Version 2, Pin P1-31 */
     RPI_V2_GPIO_P1_32     = 12,  /*!< Version 2, Pin P1-32 */
     RPI_V2_GPIO_P1_33     = 13,  /*!< Version 2, Pin P1-33 */
-    RPI_V2_GPIO_P1_35     = 19,  /*!< Version 2, Pin P1-35 */
+    RPI_V2_GPIO_P1_35     = 19,  /*!< Version 2, Pin P1-35, can be PWM channel 1 in ALT FUN 5  */
     RPI_V2_GPIO_P1_36     = 16,  /*!< Version 2, Pin P1-36 */
     RPI_V2_GPIO_P1_37     = 26,  /*!< Version 2, Pin P1-37 */
     RPI_V2_GPIO_P1_38     = 20,  /*!< Version 2, Pin P1-38 */
@@ -747,7 +794,7 @@ typedef enum
     RPI_BPLUS_GPIO_J8_31     =  6,  /*!< B+, Pin J8-31,  */
     RPI_BPLUS_GPIO_J8_32     = 12,  /*!< B+, Pin J8-32,  */
     RPI_BPLUS_GPIO_J8_33     = 13,  /*!< B+, Pin J8-33,  */
-    RPI_BPLUS_GPIO_J8_35     = 19,  /*!< B+, Pin J8-35,  */
+    RPI_BPLUS_GPIO_J8_35     = 19,  /*!< B+, Pin J8-35, can be PWM channel 1 in ALT FUN 5 */
     RPI_BPLUS_GPIO_J8_36     = 16,  /*!< B+, Pin J8-36,  */
     RPI_BPLUS_GPIO_J8_37     = 26,  /*!< B+, Pin J8-37,  */
     RPI_BPLUS_GPIO_J8_38     = 20,  /*!< B+, Pin J8-38,  */
@@ -827,29 +874,36 @@ typedef enum
 /*! \brief bcm2835SPIClockDivider
   Specifies the divider used to generate the SPI clock from the system clock.
   Figures below give the divider, clock period and clock frequency.
-  Clock divided is based on nominal base clock rate of 250MHz
+  Clock divided is based on nominal core clock rate of 250MHz on RPi1 and RPi2, and 400MHz on RPi3.
   It is reported that (contrary to the documentation) any even divider may used.
-  The frequencies shown for each divider have been confirmed by measurement
+  The frequencies shown for each divider have been confirmed by measurement on RPi1 and RPi2.
+  The system clock frequency on RPi3 is different, so the frequency you get from a given divider will be different.
+  See comments in 'SPI Pins' for information about reliable SPI speeds.
+  Note: it is possible to change the core clock rate of the RPi 3 back to 250MHz, by putting 
+  \code
+  core_freq=250
+  \endcode
+  in the config.txt
 */
 typedef enum
 {
-    BCM2835_SPI_CLOCK_DIVIDER_65536 = 0,       /*!< 65536 = 262.144us = 3.814697260kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_32768 = 32768,   /*!< 32768 = 131.072us = 7.629394531kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_16384 = 16384,   /*!< 16384 = 65.536us = 15.25878906kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_8192  = 8192,    /*!< 8192 = 32.768us = 30/51757813kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_4096  = 4096,    /*!< 4096 = 16.384us = 61.03515625kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_2048  = 2048,    /*!< 2048 = 8.192us = 122.0703125kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_1024  = 1024,    /*!< 1024 = 4.096us = 244.140625kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_512   = 512,     /*!< 512 = 2.048us = 488.28125kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_256   = 256,     /*!< 256 = 1.024us = 976.5625kHz */
-    BCM2835_SPI_CLOCK_DIVIDER_128   = 128,     /*!< 128 = 512ns = = 1.953125MHz */
-    BCM2835_SPI_CLOCK_DIVIDER_64    = 64,      /*!< 64 = 256ns = 3.90625MHz */
-    BCM2835_SPI_CLOCK_DIVIDER_32    = 32,      /*!< 32 = 128ns = 7.8125MHz */
-    BCM2835_SPI_CLOCK_DIVIDER_16    = 16,      /*!< 16 = 64ns = 15.625MHz */
-    BCM2835_SPI_CLOCK_DIVIDER_8     = 8,       /*!< 8 = 32ns = 31.25MHz */
-    BCM2835_SPI_CLOCK_DIVIDER_4     = 4,       /*!< 4 = 16ns = 62.5MHz */
-    BCM2835_SPI_CLOCK_DIVIDER_2     = 2,       /*!< 2 = 8ns = 125MHz, fastest you can get */
-    BCM2835_SPI_CLOCK_DIVIDER_1     = 1        /*!< 1 = 262.144us = 3.814697260kHz, same as 0/65536 */
+    BCM2835_SPI_CLOCK_DIVIDER_65536 = 0,       /*!< 65536 = 3.814697260kHz on Rpi2, 6.1035156kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_32768 = 32768,   /*!< 32768 = 7.629394531kHz on Rpi2, 12.20703125kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_16384 = 16384,   /*!< 16384 = 15.25878906kHz on Rpi2, 24.4140625kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_8192  = 8192,    /*!< 8192 = 30.51757813kHz on Rpi2, 48.828125kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_4096  = 4096,    /*!< 4096 = 61.03515625kHz on Rpi2, 97.65625kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_2048  = 2048,    /*!< 2048 = 122.0703125kHz on Rpi2, 195.3125kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_1024  = 1024,    /*!< 1024 = 244.140625kHz on Rpi2, 390.625kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_512   = 512,     /*!< 512 = 488.28125kHz on Rpi2, 781.25kHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_256   = 256,     /*!< 256 = 976.5625kHz on Rpi2, 1.5625MHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_128   = 128,     /*!< 128 = 1.953125MHz on Rpi2, 3.125MHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_64    = 64,      /*!< 64 = 3.90625MHz on Rpi2, 6.250MHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_32    = 32,      /*!< 32 = 7.8125MHz on Rpi2, 12.5MHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_16    = 16,      /*!< 16 = 15.625MHz on Rpi2, 25MHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_8     = 8,       /*!< 8 = 31.25MHz on Rpi2, 50MHz on RPI3 */
+    BCM2835_SPI_CLOCK_DIVIDER_4     = 4,       /*!< 4 = 62.5MHz on Rpi2, 100MHz on RPI3. Dont expect this speed to work reliably. */
+    BCM2835_SPI_CLOCK_DIVIDER_2     = 2,       /*!< 2 = 125MHz on Rpi2, 200MHz on RPI3, fastest you can get. Dont expect this speed to work reliably.*/
+    BCM2835_SPI_CLOCK_DIVIDER_1     = 1        /*!< 1 = 3.814697260kHz on Rpi2, 6.1035156kHz on RPI3, same as 0/65536 */
 } bcm2835SPIClockDivider;
 
 /* Defines for I2C
@@ -999,12 +1053,16 @@ extern "C" {
       @{
     */
 
-    /*! Initialise the library by opening /dev/mem and getting pointers to the 
+    /*! Initialise the library by opening /dev/mem (if you are root) 
+      or /dev/gpiomem (if you are not)
+      and getting pointers to the 
       internal memory for BCM 2835 device registers. You must call this (successfully)
       before calling any other 
       functions in this library (except bcm2835_set_debug). 
       If bcm2835_init() fails by returning 0, 
       calling any other function may result in crashes or other failures.
+      If bcm2835_init() succeeds but you are not running as root, then only gpio operations
+      are permitted, and calling any other functions may result in crashes or other failures. .
       Prints messages to stderr in case of errors.
       \return 1 if successful else 0
     */
@@ -1285,12 +1343,14 @@ extern "C" {
     extern void bcm2835_gpio_pudclk(uint8_t pin, uint8_t on);
 
     /*! Reads and returns the Pad Control for the given GPIO group.
+      Caution: requires root access.
       \param[in] group The GPIO pad group number, one of BCM2835_PAD_GROUP_GPIO_*
       \return Mask of bits from BCM2835_PAD_* from \ref bcm2835PadGroup
     */
     extern uint32_t bcm2835_gpio_pad(uint8_t group);
 
     /*! Sets the Pad Control for the given GPIO group.
+      Caution: requires root access.
       \param[in] group The GPIO pad group number, one of BCM2835_PAD_GROUP_GPIO_*
       \param[in] control Mask of bits from BCM2835_PAD_* from \ref bcm2835PadGroup. Note 
       that it is not necessary to include BCM2835_PAD_PASSWRD in the mask as this
@@ -1362,10 +1422,11 @@ extern "C" {
       Forces RPi SPI0 pins P1-19 (MOSI), P1-21 (MISO), P1-23 (CLK), P1-24 (CE0) and P1-26 (CE1)
       to alternate function ALT0, which enables those pins for SPI interface.
       You should call bcm2835_spi_end() when all SPI funcitons are complete to return the pins to 
-      their default functions
+      their default functions.
       \sa  bcm2835_spi_end()
+      \return 1 if successful, 0 otherwise (perhaps because you are not running as root)
     */
-    extern void bcm2835_spi_begin(void);
+    extern int bcm2835_spi_begin(void);
 
     /*! End SPI operations.
       SPI0 pins P1-19 (MOSI), P1-21 (MISO), P1-23 (CLK), P1-24 (CE0) and P1-26 (CE1)
@@ -1468,9 +1529,10 @@ extern "C" {
       to alternate function ALT0, which enables those pins for I2C interface.
       You should call bcm2835_i2c_end() when all I2C functions are complete to return the pins to
       their default functions
+      \return 1 if successful, 0 otherwise (perhaps because you are not running as root)
       \sa  bcm2835_i2c_end()
     */
-    extern void bcm2835_i2c_begin(void);
+    extern int bcm2835_i2c_begin(void);
 
     /*! End I2C operations.
       I2C pins P1-03 (SDA) and P1-05 (SCL)
